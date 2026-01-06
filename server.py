@@ -125,42 +125,63 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
     Returns:
         List of TextContent with results in JSON format
     """
-    if name == "search_snaps":
-        query = arguments["query"]
+    try:
+        if name == "search_snaps":
+            query = arguments["query"]
+            
+            # Execute snap search command
+            result = subprocess.run(
+                ["snap", "search", query],
+                capture_output=True,
+                text=True,
+                check=True  # Raises CalledProcessError if command fails
+            )
+            
+            # Parse raw output into structured data
+            packages = parse_snap_search(result.stdout)
+            
+            # Convert to pretty JSON
+            output = json.dumps(packages, indent=2)
+            
+            return [TextContent(type="text", text=output)]
         
-        # Execute snap search command
-        result = subprocess.run(
-            ["snap", "search", query],
-            capture_output=True,  # Capture stdout/stderr
-            text=True             # Return as string, not bytes
-        )
-        
-        # Parse raw output into structured data
-        packages = parse_snap_search(result.stdout)
-        
-        # Convert to pretty JSON
-        output = json.dumps(packages, indent=2)
-        
-        return [TextContent(type="text", text=output)]
+        elif name == "snap_info":
+            package_name = arguments["package_name"]
+            
+            # Execute snap info command
+            result = subprocess.run(
+                ["snap", "info", package_name],
+                capture_output=True,
+                text=True,
+                check=True  # Raises CalledProcessError if command fails
+            )
+            
+            # Parse raw output into structured data
+            info = parse_snap_info(result.stdout)
+            
+            # Convert to pretty JSON
+            output = json.dumps(info, indent=2)
+            
+            return [TextContent(type="text", text=output)]
     
-    elif name == "snap_info":
-        package_name = arguments["package_name"]
-        
-        # Execute snap info command
-        result = subprocess.run(
-            ["snap", "info", package_name],
-            capture_output=True,
-            text=True
-        )
-        
-        # Parse raw output into structured data
-        info = parse_snap_info(result.stdout)
-        
-        # Convert to pretty JSON
-        output = json.dumps(info, indent=2)
-        
-        return [TextContent(type="text", text=output)]
-
+    except subprocess.CalledProcessError as e:
+        # Command failed (package not found, snap not installed, etc.)
+        error_message = {
+            "error": "Command failed",
+            "command": " ".join(e.cmd),
+            "stderr": e.stderr.strip() if e.stderr else "No error details available",
+            "suggestion": "Check if the package name is correct. Try using 'search_snaps' first."
+        }
+        return [TextContent(type="text", text=json.dumps(error_message, indent=2))]
+    
+    except Exception as e:
+        # Unexpected error
+        error_message = {
+            "error": "Unexpected error",
+            "details": str(e),
+            "suggestion": "Please report this issue on GitHub"
+        }
+        return [TextContent(type="text", text=json.dumps(error_message, indent=2))]
 
 async def main():
     """
